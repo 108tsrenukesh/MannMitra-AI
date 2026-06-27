@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MannMitra — Tests</title>
+  <link rel="stylesheet" href="assets/css/styles.css" />
+</head>
+<body>
+  <main class="wrap">
+    <div class="hero"><h1>MannMitra tests</h1><p class="sub">Safety classifier, triggers, patterns & insights — run live.</p></div>
+    <div id="summary" class="card reflection" role="status">Running…</div>
+    <div class="card"><ul id="results" style="list-style:none;padding:0;margin:0"></ul></div>
+    <p class="center"><a href="index.html">← Back to MannMitra</a></p>
+  </main>
+  <script type="module">
+    import { runTests } from "./assets/js/app.test.js";
+    const { passed, failed, results } = runTests();
+    const s = document.getElementById("summary");
+    s.textContent = `${passed} passed, ${failed} failed`;
+    s.style.borderLeftColor = failed === 0 ? "var(--accent)" : "var(--danger)";
+    const list = document.getElementById("results");
+    for (const r of results) {
+      const li = document.createElement("li");
+      li.style.padding = "8px 0";
+      li.style.borderBottom = "1px solid var(--border)";
+      li.style.color = r.ok ? "var(--text)" : "var(--danger)";
+      li.textContent = (r.ok ? "✔ " : "✖ ") + r.name + (r.error ? " — " + r.error : "");
+      list.appendChild(li);
+    }
+  </script>
+</body>
+</html>

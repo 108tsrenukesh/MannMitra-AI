@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="MannMitra — a private, multilingual AI wellbeing companion for Indian students preparing for high-stakes exams. Journals, mood logs, gentle insights, and safe crisis support." />
+  <meta name="theme-color" content="#0f1320" />
+  <!-- Security: no inline scripts/styles; network limited to AI providers. -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; connect-src 'self' https://generativelanguage.googleapis.com https://api.groq.com; img-src 'self' data:; style-src 'self'; script-src 'self'; base-uri 'self'; form-action 'self'" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%AA%B7%3C/text%3E%3C/svg%3E" />
+  <title>MannMitra — your mind's quiet companion</title>
+  <link rel="stylesheet" href="assets/css/styles.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <!-- Top bar: brand + always-available help (the safety net is never more than one tap away) -->
+  <div class="topbar">
+    <div class="logo">Mann<span>Mitra</span></div>
+    <div class="topbar-actions">
+      <button class="btn btn--ghost" id="settings-btn" type="button" aria-label="Settings">⚙️</button>
+      <button class="btn btn--sos" id="sos-btn" type="button">Talk to someone now</button>
+    </div>
+  </div>
+
+  <main id="main" class="wrap">
+
+    <!-- ===== Onboarding ===== -->
+    <section id="screen-onboard">
+      <div class="hero">
+        <span class="badge">PromptWars · Build with AI</span>
+        <h1>A quiet companion for the<br />hardest stretch of your prep 🪷</h1>
+        <p class="sub">Private. Anonymous. Here whenever the pressure builds.</p>
+      </div>
+
+      <div class="card">
+        <div class="field">
+          <label for="onb-exam">Which exam are you preparing for?</label>
+          <select id="onb-exam"></select>
+        </div>
+        <div class="field">
+          <label for="onb-lang">Language you're most comfortable in</label>
+          <select id="onb-lang"></select>
+        </div>
+        <div class="field">
+          <label for="onb-name">A name or nickname <span class="muted">(optional — you can stay anonymous)</span></label>
+          <input type="text" id="onb-name" maxlength="24" placeholder="e.g. just leave this blank" autocomplete="off" />
+        </div>
+
+        <p class="privacy">
+          🔒 Your journal stays on <strong>this device only</strong>. We don't ask for a login and we
+          store nothing on a server. Only the words you choose to reflect on are sent to the AI to write
+          back to you. MannMitra is a supportive companion, <strong>not a doctor or therapist</strong> —
+          if things get heavy, it will help you reach a real person.
+        </p>
+
+        <button class="btn btn--primary btn--block" id="onb-start" type="button">Start</button>
+      </div>
+    </section>
+
+    <!-- ===== App ===== -->
+    <section id="screen-app" class="hidden">
+      <p class="muted" id="greeting" aria-live="polite"></p>
+
+      <!-- Check-in -->
+      <div id="tab-checkin" class="tabpanel">
+        <div class="card">
+          <h2>Today's check-in</h2>
+          <p class="muted" id="checkin-prompt">How are you feeling right now?</p>
+          <div class="moods" id="mood-scale" role="group" aria-label="Mood">
+            <button class="mood" type="button" data-mood="1" aria-pressed="false">😣<small>Awful</small></button>
+            <button class="mood" type="button" data-mood="2" aria-pressed="false">😟<small>Low</small></button>
+            <button class="mood" type="button" data-mood="3" aria-pressed="false">😐<small>Okay</small></button>
+            <button class="mood" type="button" data-mood="4" aria-pressed="false">🙂<small>Good</small></button>
+            <button class="mood" type="button" data-mood="5" aria-pressed="false">😄<small>Great</small></button>
+          </div>
+          <div class="field" style="margin-top:14px">
+            <label for="journal">What's on your mind? <span class="muted">(a sentence is plenty)</span></label>
+            <textarea id="journal" placeholder="The mock went badly and everyone seems ahead of me…"></textarea>
+          </div>
+          <button class="btn btn--primary btn--block" id="checkin-submit" type="button">Reflect with MannMitra</button>
+          <p class="muted" id="checkin-status" role="status" aria-live="polite" style="margin-top:10px"></p>
+
+          <div id="reflection-out" class="hidden" style="margin-top:14px">
+            <div class="reflection" id="reflection-text"></div>
+            <div class="chip-row" id="reflection-triggers"></div>
+            <ul class="coping" id="reflection-coping"></ul>
+            <button class="btn btn--ghost btn--block" id="goto-talk" type="button" style="margin-top:12px">Talk it through →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Talk (companion) -->
+      <div id="tab-talk" class="tabpanel hidden">
+        <div class="card">
+          <h2>Talk it through</h2>
+          <p class="muted">A calm space to think out loud. Not a therapist — a companion.</p>
+          <div class="chat" id="chat" aria-live="polite"></div>
+          <form class="chat-form" id="chat-form">
+            <label for="chat-input" class="skip-link">Your message</label>
+            <input type="text" id="chat-input" placeholder="Type how you're feeling…" autocomplete="off" />
+            <button class="btn btn--primary" type="submit">Send</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Insights -->
+      <div id="tab-insights" class="tabpanel hidden">
+        <div class="card">
+          <h2>Your patterns</h2>
+          <p class="muted">Gentle observations from your own check-ins — the things a number alone misses.</p>
+          <div class="stat" id="insight-stats"></div>
+          <div id="pattern-week" class="reflection hidden" style="margin-top:14px"></div>
+          <h3 style="margin-top:18px">Mood over time</h3>
+          <div class="spark" id="mood-spark" aria-label="Mood trend"></div>
+          <p class="muted" id="spark-empty">Check in a few times to see your trend here.</p>
+          <h3 style="margin-top:24px">What weighs on you</h3>
+          <div class="cloud" id="trigger-cloud"></div>
+          <p class="muted" id="cloud-empty">Your recurring themes will appear here.</p>
+        </div>
+      </div>
+
+      <!-- Toolkit -->
+      <div id="tab-toolkit" class="tabpanel hidden">
+        <div class="card">
+          <h2>Calm-down toolkit</h2>
+          <p class="muted">Works fully offline — no internet or AI needed.</p>
+          <div id="toolkit-list"></div>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <nav class="tabs" role="tablist" aria-label="Sections">
+        <button class="tab" role="tab" data-tab="checkin" aria-selected="true">📝 Check-in</button>
+        <button class="tab" role="tab" data-tab="talk" aria-selected="false">💬 Talk</button>
+        <button class="tab" role="tab" data-tab="insights" aria-selected="false">📈 Patterns</button>
+        <button class="tab" role="tab" data-tab="toolkit" aria-selected="false">🧰 Toolkit</button>
+      </nav>
+    </section>
+
+    <!-- ===== Crisis screen (interrupts everything) ===== -->
+    <section id="screen-crisis" class="hidden">
+      <div class="card crisis">
+        <h2>You matter — and you don't have to carry this alone 💙</h2>
+        <p>What you're feeling sounds really heavy. I'm just a companion, but a trained person can
+        support you right now, for free and in your language. Please reach out:</p>
+        <div id="crisis-helplines"></div>
+        <p class="muted">If you're in immediate danger, please call your local emergency number (112).</p>
+        <div class="row" style="margin-top:12px">
+          <button class="btn btn--primary" id="crisis-back" type="button">I'm safe — go back</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Settings ===== -->
+    <section id="screen-settings" class="hidden">
+      <div class="card">
+        <h2>Settings</h2>
+        <h3>AI keys <span class="muted">(optional)</span></h3>
+        <p class="muted">MannMitra works without keys (offline reflections). Add a key to enable richer
+          Gemini/Groq responses. Keys stay in this browser tab only and are never saved to the code.</p>
+        <div class="field">
+          <label for="set-gemini">Gemini API key</label>
+          <input type="password" id="set-gemini" placeholder="AIza…" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="set-groq">Groq API key (fallback)</label>
+          <input type="password" id="set-groq" placeholder="gsk_…" autocomplete="off" />
+        </div>
+        <button class="btn btn--primary" id="set-save" type="button">Save keys</button>
+
+        <h3 style="margin-top:22px">Your data</h3>
+        <div class="row">
+          <button class="btn" id="data-export" type="button">⬇️ Export my data</button>
+          <button class="btn btn--sos" id="data-delete" type="button">🗑️ Delete everything</button>
+        </div>
+        <button class="btn btn--ghost btn--block" id="set-back" type="button" style="margin-top:16px">← Back</button>
+      </div>
+    </section>
+
+    <p class="footer-note">MannMitra is a supportive companion, not a substitute for professional care.
+      In distress? Tele-MANAS 14416 (free, 24×7).</p>
+  </main>
+
+  <script type="module" src="assets/js/app.js"></script>
+</body>
+</html>

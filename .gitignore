@@ -1,0 +1,13 @@
+# secrets — never commit real keys
+.env
+*.key
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# deps (none needed; static app)
+node_modules/
+*.log

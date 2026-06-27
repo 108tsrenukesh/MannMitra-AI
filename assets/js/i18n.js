@@ -6,7 +6,7 @@
 
 export const STRINGS = {
   en: {
-    sos: "Talk to someone now",
+    sos: "🆘 SOS · Talk to a human",
     tagline: "A quiet companion for the hardest stretch of your prep",
     sub: "Private. Anonymous. Here whenever the pressure builds.",
     q_exam: "Which exam are you preparing for?",
@@ -63,7 +63,7 @@ export const STRINGS = {
     avg_mood: "avg mood",
   },
   hi: {
-    sos: "अभी किसी से बात करें",
+    sos: "🆘 SOS · किसी से बात करें",
     tagline: "तैयारी के सबसे कठिन दौर का एक शांत साथी",
     sub: "निजी। गुमनाम। जब भी दबाव बढ़े, यहाँ मौजूद।",
     q_exam: "आप किस परीक्षा की तैयारी कर रहे हैं?",

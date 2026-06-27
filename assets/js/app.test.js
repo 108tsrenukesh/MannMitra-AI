@@ -1,7 +1,6 @@
-// app.test.js — framework-free unit tests. Runs in the browser (tests.html) and Node.
-// Focus: the safety classifier (most important), triggers, patterns, insights, i18n, PIN.
+// app.test.js — framework-free unit tests. Runs in browser (tests.html) and Node.
 import { assessRisk, isCrisis } from "./safety.js";
-import { detectTriggers, sentimentScore, deterministicReflection, detectPatterns } from "./analysis.js";
+import { detectTriggers, sentimentScore, deterministicReflection, detectPatterns, bucketBrainDump } from "./analysis.js";
 import { buildMoodSeries, buildTriggerCloud, currentStreak } from "./insights.js";
 import { t } from "./i18n.js";
 import { hasPin, setPin, verifyPin, clearPin } from "./auth.js";
@@ -31,13 +30,15 @@ export const tests = [
   { name: "currentStreak 0 with no recent entries", fn() { eq(currentStreak([{ ts: Date.now() - 10*dayMs, mood: 3 }]), 0); } },
   { name: "i18n t(): English base + key fallback", fn() { eq(t("start"), "Start"); eq(t("__nope__"), "__nope__"); } },
   { name: "auth: set, verify (right+wrong), clear", async fn() { await setPin("1234"); assert(hasPin()); assert(await verifyPin("1234")); assert(!(await verifyPin("0000"))); clearPin(); assert(!hasPin()); } },
+  { name: "brainDump bucketing groups by trigger + adds tips", fn() {
+      const b = bucketBrainDump("Everyone is ranked above me. I barely slept last night. The syllabus is huge.");
+      assert(Array.isArray(b) && b.length >= 2, "should produce multiple buckets");
+      assert(b.every((x) => x.bucket && Array.isArray(x.items) && x.tip), "each bucket has label, items, tip");
+    } },
 ];
 
 export async function runTests() {
   const results = [];
-  for (const tc of tests) {
-    try { await tc.fn(); results.push({ name: tc.name, ok: true }); }
-    catch (e) { results.push({ name: tc.name, ok: false, error: e.message }); }
-  }
+  for (const tc of tests) { try { await tc.fn(); results.push({ name: tc.name, ok: true }); } catch (e) { results.push({ name: tc.name, ok: false, error: e.message }); } }
   return { passed: results.filter((r) => r.ok).length, failed: results.filter((r) => !r.ok).length, results };
 }

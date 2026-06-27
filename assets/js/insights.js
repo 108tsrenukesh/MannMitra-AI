@@ -11,6 +11,7 @@ export function buildMoodSeries(entries) {
       ts: e.ts,
       mood: e.mood,
       label: new Date(e.ts).toLocaleDateString("en-IN", { day: "numeric", month: "short" }),
+      full: new Date(e.ts).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "2-digit", hour: "2-digit", minute: "2-digit" }),
     }));
 }
 

@@ -1,4 +1,4 @@
-// config.js — static configuration: helplines, languages, exam types, coping content.
+// config.js — static configuration: helplines, languages, exams, coping, exercises.
 // No secrets here. API keys are entered at runtime (see ai.js) or injected by CI.
 
 export const HELPLINES = [
@@ -19,7 +19,6 @@ export const EXAMS = [
   { id: "other", label: "Other / board exams" },
 ];
 
-// 22 scheduled languages of the Eighth Schedule + English (+ Hinglish convenience).
 export const LANGUAGES = [
   { code: "en", name: "English", en: "English" },
   { code: "hi", name: "हिन्दी", en: "Hindi" },
@@ -47,7 +46,6 @@ export const LANGUAGES = [
   { code: "sa", name: "संस्कृतम्", en: "Sanskrit" },
 ];
 
-// Deterministic coping suggestions keyed by detected trigger (fallback when AI is off).
 export const COPING_BY_TRIGGER = {
   comparison: "Comparison steals calm. Compare today-you to yesterday-you, not to a topper.",
   sleep: "Under-6h sleep tracks with low-mood days. Protect a fixed sleep window tonight.",
@@ -61,7 +59,6 @@ export const COPING_BY_TRIGGER = {
   general: "Be as patient with yourself as you'd be with a friend sitting your exam.",
 };
 
-// Richer toolkit. "phased" = animated timed circle; "steps" = a static checklist.
 export const EXERCISES = [
   { id: "box", icon: "🫁", title: "Box breathing", desc: "4-4-4-4 — instant calm.", kind: "phased",
     phases: [ { label: "Breathe in", secs: 4, big: true }, { label: "Hold", secs: 4, big: true }, { label: "Breathe out", secs: 4, big: false }, { label: "Hold", secs: 4, big: false } ] },
@@ -75,6 +72,8 @@ export const EXERCISES = [
     phases: [ { label: "Tense your fists", secs: 5, big: true }, { label: "Release, notice the calm", secs: 8, big: false }, { label: "Tense your shoulders", secs: 5, big: true }, { label: "Release, breathe", secs: 8, big: false } ] },
   { id: "reframe", icon: "💭", title: "Reframe a harsh thought", desc: "Swap it for a kinder truth.", kind: "steps",
     steps: [ "Write the exact harsh thought ('I'll never clear this').", "Ask: would I say this to a friend in my place?", "Find one piece of evidence it isn't fully true.", "Rewrite it fairly ('This topic is hard; I can improve it').", "Notice your shoulders drop a little." ] },
+  { id: "rankreframe", icon: "📊", title: "Rank-anxiety reframe", desc: "Loosen the grip of ranks & comparison.", kind: "steps",
+    steps: [ "Name the exact rank fear ('if I'm not top 100 I've failed').", "Whose standard is that — yours, or borrowed from coaching/peers?", "List 2 things YOU improved this week, regardless of rank.", "Rewrite it around progress ('I'm closing my own gaps').", "Pick one next action in your control for the next hour." ] },
   { id: "gratitude", icon: "🙏", title: "Gratitude note", desc: "Name 3 good things — a proven mood lift.", kind: "steps",
     steps: [ "Write down 3 things that went okay today, however small.", "For each, note why it happened or what it meant to you.", "Notice you can usually find something, even on hard days." ] },
   { id: "connect", icon: "🤝", title: "Reach out to someone", desc: "Connection is the strongest buffer.", kind: "steps",

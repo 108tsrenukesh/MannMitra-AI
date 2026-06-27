@@ -1,18 +1,19 @@
-// app.js — UI controller. Screen routing, safe DOM rendering, and the safety gate that
-// sits in front of every AI interaction.
+// app.js — UI controller. Screen routing, i18n, optional PIN lock, safe DOM rendering,
+// and the crisis safety gate that sits in front of every AI interaction.
 
-import { EXAMS, LANGUAGES, HELPLINES, TOOLKIT } from "./config.js";
+import { EXAMS, LANGUAGES, HELPLINES, EXERCISES, SUGGESTIONS, QUOTES } from "./config.js";
 import { assessRisk } from "./safety.js";
-import { analyseEntry, companionReply, setKeys, aiAvailable } from "./ai.js";
+import { analyseEntry, companionReply, setKeys, aiAvailable, translateUI } from "./ai.js";
 import { deterministicReflection, detectPatterns } from "./analysis.js";
 import * as store from "./storage.js";
 import { buildMoodSeries, buildTriggerCloud, currentStreak } from "./insights.js";
+import { t, setLang, applyTranslations, getLang, STRINGS } from "./i18n.js";
+import { hasPin, setPin, verifyPin, clearPin } from "./auth.js";
 
 const $ = (id) => document.getElementById(id);
-
 const state = { profile: null, mood: null, chat: [], lastScreen: "screen-app" };
 
-/* ---------- tiny safe-DOM helpers ---------- */
+/* ---------- safe-DOM helpers ---------- */
 function el(tag, cls, text) {
   const n = document.createElement(tag);
   if (cls) n.className = cls;
@@ -20,49 +21,133 @@ function el(tag, cls, text) {
   return n;
 }
 function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
-function langName(code) { return (LANGUAGES.find((l) => l.code === code) || {}).en || "English"; }
+function langMeta(code) { return LANGUAGES.find((l) => l.code === code) || LANGUAGES[0]; }
 
-/* ---------- screen routing ---------- */
-const SCREENS = ["screen-onboard", "screen-app", "screen-crisis", "screen-settings"];
+/* ---------- screens ---------- */
+const SCREENS = ["screen-lock", "screen-onboard", "screen-app", "screen-crisis", "screen-settings", "screen-pinset"];
 function show(id) {
   SCREENS.forEach((s) => $(s).classList.toggle("hidden", s !== id));
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
+/* ---------- theme ---------- */
+function applyStoredTheme() { setTheme(localStorage.getItem("mm_theme") || "dark"); }
+function setTheme(tm) {
+  if (tm === "light") document.documentElement.setAttribute("data-theme", "light");
+  else document.documentElement.removeAttribute("data-theme");
+  localStorage.setItem("mm_theme", tm);
+  const b = $("theme-btn"); if (b) b.textContent = tm === "light" ? "☀️" : "🌙";
+}
+function toggleTheme() { setTheme(localStorage.getItem("mm_theme") === "light" ? "dark" : "light"); }
+
+/* ---------- language ---------- */
+async function applyLanguage(code, statusEl) {
+  const meta = langMeta(code);
+  const needsAI = !STRINGS[code] && !localStorage.getItem("mm_i18n_" + code);
+  if (needsAI && statusEl) statusEl.textContent = aiAvailable()
+    ? `Translating to ${meta.en}…`
+    : `Showing English (add an AI key to auto-translate to ${meta.en}).`;
+  await setLang(code, translateUI, meta.en);
+  // refresh JS-rendered, non-static text
+  renderHelplines(); renderToolkit(); renderQuote(); renderGreeting(); renderChatSuggestions();
+  if (statusEl) statusEl.textContent = "";
+}
+
 /* ---------- init ---------- */
-function init() {
+async function init() {
   applyStoredTheme();
-  // populate selects
   EXAMS.forEach((e) => $("onb-exam").appendChild(new Option(e.label, e.id)));
-  LANGUAGES.forEach((l) => $("onb-lang").appendChild(new Option(l.name + " · " + l.en, l.code)));
+  LANGUAGES.forEach((l) => {
+    $("onb-lang").appendChild(new Option(l.name + " · " + l.en, l.code));
+    $("set-lang").appendChild(new Option(l.name + " · " + l.en, l.code));
+  });
 
   renderHelplines();
   renderToolkit();
   wireEvents();
 
   state.profile = store.getProfile();
-  if (state.profile) {
+  if (state.profile?.language) {
+    $("onb-lang").value = state.profile.language;
+    $("set-lang").value = state.profile.language;
+    await applyLanguage(state.profile.language);
+  }
+  refreshPinStatus();
+
+  // Route: PIN lock → app/onboard
+  if (hasPin()) {
+    openLock();
+  } else if (state.profile) {
     enterApp();
   } else {
     show("screen-onboard");
   }
 }
 
-/* ---------- theme ---------- */
-function applyStoredTheme() {
-  const t = localStorage.getItem("mm_theme") || "dark";
-  setTheme(t);
+/* ---------- PIN lock ---------- */
+function renderPinPad(padId, dotsId, onDigit) {
+  const pad = $(padId);
+  clear(pad);
+  const keys = ["1","2","3","4","5","6","7","8","9","","0","del"];
+  keys.forEach((k) => {
+    if (k === "") { pad.appendChild(el("span")); return; }
+    const b = el("button", "pin-key", k === "del" ? "⌫" : k);
+    b.type = "button";
+    b.addEventListener("click", () => onDigit(k));
+    pad.appendChild(b);
+  });
+  updateDots(dotsId, 0);
 }
-function setTheme(t) {
-  if (t === "light") document.documentElement.setAttribute("data-theme", "light");
-  else document.documentElement.removeAttribute("data-theme");
-  localStorage.setItem("mm_theme", t);
-  const btn = $("theme-btn");
-  if (btn) btn.textContent = t === "light" ? "☀️" : "🌙";
+function updateDots(dotsId, n) {
+  const d = $(dotsId); clear(d);
+  for (let i = 0; i < 4; i++) d.appendChild(el("span", "pin-dot" + (i < n ? " filled" : "")));
 }
-function toggleTheme() {
-  const now = localStorage.getItem("mm_theme") === "light" ? "dark" : "light";
-  setTheme(now);
+
+let lockBuf = "";
+function openLock() {
+  lockBuf = "";
+  renderPinPad("lock-pad", "lock-dots", async (k) => {
+    lockBuf = k === "del" ? lockBuf.slice(0, -1) : (lockBuf.length < 4 ? lockBuf + k : lockBuf);
+    updateDots("lock-dots", lockBuf.length);
+    if (lockBuf.length === 4) {
+      if (await verifyPin(lockBuf)) {
+        state.profile ? enterApp() : show("screen-onboard");
+      } else {
+        $("lock-error").textContent = "Incorrect PIN. Try again.";
+        lockBuf = ""; updateDots("lock-dots", 0);
+        setTimeout(() => ($("lock-error").textContent = ""), 1500);
+      }
+    }
+  });
+  show("screen-lock");
+}
+
+let pinsetBuf = "", pinsetFirst = "";
+function openPinSet() {
+  pinsetBuf = ""; pinsetFirst = "";
+  $("pinset-prompt").textContent = "Choose a 4-digit PIN";
+  renderPinPad("pinset-pad", "pinset-dots", async (k) => {
+    pinsetBuf = k === "del" ? pinsetBuf.slice(0, -1) : (pinsetBuf.length < 4 ? pinsetBuf + k : pinsetBuf);
+    updateDots("pinset-dots", pinsetBuf.length);
+    if (pinsetBuf.length === 4) {
+      if (!pinsetFirst) {
+        pinsetFirst = pinsetBuf; pinsetBuf = "";
+        $("pinset-prompt").textContent = "Re-enter to confirm";
+        updateDots("pinset-dots", 0);
+      } else if (pinsetFirst === pinsetBuf) {
+        await setPin(pinsetBuf);
+        refreshPinStatus();
+        show("screen-settings");
+      } else {
+        $("pinset-prompt").textContent = "Didn't match — choose again";
+        pinsetFirst = ""; pinsetBuf = ""; updateDots("pinset-dots", 0);
+      }
+    }
+  });
+  show("screen-pinset");
+}
+function refreshPinStatus() {
+  $("pin-status").textContent = hasPin() ? t("pin_on") : "No PIN set.";
 }
 
 /* ---------- onboarding ---------- */
@@ -76,63 +161,53 @@ function startOnboarding() {
   store.saveProfile(state.profile);
   enterApp();
 }
-
 function enterApp() {
-  const who = state.profile.nickname ? `, ${state.profile.nickname}` : "";
-  $("greeting").textContent = `Hi${who}. This is your space — no judgement, no scores.`;
   show("screen-app");
+  renderGreeting(); renderQuote(); renderChatSuggestions(); renderExam();
   switchTab("checkin");
   renderInsights();
+}
+function renderGreeting() {
+  if (!state.profile) return;
+  const h = new Date().getHours();
+  const g = h < 12 ? t("greeting_morning") : h < 17 ? t("greeting_afternoon") : t("greeting_evening");
+  const who = state.profile.nickname ? `, ${state.profile.nickname}` : "";
+  $("greeting").textContent = `${g}${who}.`;
+}
+function renderQuote() {
+  const q = QUOTES[Math.floor(Math.random() * QUOTES.length)];
+  const card = $("quote-card"); clear(card);
+  card.appendChild(el("p", "qt", `“${q.text}”`));
+  if (q.author && q.author !== "—") card.appendChild(el("p", "qa", "— " + q.author));
 }
 
 /* ---------- tabs ---------- */
 function switchTab(name) {
-  ["checkin", "talk", "insights", "toolkit"].forEach((t) => {
-    $("tab-" + t).classList.toggle("hidden", t !== name);
-  });
-  document.querySelectorAll(".tab").forEach((b) =>
-    b.setAttribute("aria-selected", String(b.dataset.tab === name))
-  );
+  ["checkin","talk","insights","toolkit","exam"].forEach((t2) => $("tab-" + t2).classList.toggle("hidden", t2 !== name));
+  document.querySelectorAll(".tab").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === name)));
   if (name === "insights") renderInsights();
+  if (name === "exam") renderExam();
   if (name === "talk" && state.chat.length === 0) seedChat();
 }
 
-/* ---------- check-in flow ---------- */
+/* ---------- check-in ---------- */
 async function submitCheckin() {
   const text = $("journal").value.trim();
-  if (!state.mood && !text) {
-    $("checkin-status").textContent = "Pick a mood or jot a line — whatever feels easier.";
-    return;
-  }
+  if (!state.mood && !text) { $("checkin-status").textContent = "Pick a mood or jot a line — whatever's easier."; return; }
+  if (assessRisk(text).level === "crisis") { openCrisis(); return; }
 
-  // SAFETY GATE — before anything else.
-  if (assessRisk(text).level === "crisis") {
-    openCrisis();
-    return;
-  }
-
-  const btn = $("checkin-submit");
-  btn.disabled = true;
+  const btn = $("checkin-submit"); btn.disabled = true;
   $("checkin-status").textContent = aiAvailable() ? "MannMitra is reading with care…" : "Reflecting…";
 
   let analysis;
   try {
-    analysis = await analyseEntry({
-      text,
-      mood: state.mood,
-      exam: state.profile.examLabel,
-      language: langName(state.profile.language),
-    });
-  } catch {
-    analysis = deterministicReflection(text, state.mood);
-  }
+    analysis = await analyseEntry({ text, mood: state.mood, exam: state.profile.examLabel, language: langMeta(getLang()).en });
+  } catch { analysis = deterministicReflection(text, state.mood); }
 
   store.addEntry({ mood: state.mood, text, analysis });
   renderReflection(analysis);
   $("checkin-status").textContent = analysis.source === "ai" ? "" : "Offline reflection (add an AI key in ⚙️ for richer replies).";
   btn.disabled = false;
-
-  // reset input for next time
   $("journal").value = "";
   state.mood = null;
   document.querySelectorAll(".mood").forEach((m) => m.setAttribute("aria-pressed", "false"));
@@ -141,221 +216,77 @@ async function submitCheckin() {
 function renderReflection(a) {
   $("reflection-out").classList.remove("hidden");
   $("reflection-text").textContent = a.reflection || a.insight || "Thanks for checking in.";
-
-  const chips = $("reflection-triggers");
-  clear(chips);
-  (a.triggers || []).forEach((t) => chips.appendChild(el("span", "chip", t)));
-
-  const cop = $("reflection-coping");
-  clear(cop);
+  const chips = $("reflection-triggers"); clear(chips);
+  (a.triggers || []).forEach((tr) => chips.appendChild(el("span", "chip", tr)));
+  const cop = $("reflection-coping"); clear(cop);
   (a.coping || []).forEach((c) => cop.appendChild(el("li", null, c)));
+  renderSuggestedTool(a);
+}
+
+// Adaptive mindfulness: pick the exercise that fits the detected state.
+function renderSuggestedTool(a) {
+  const wrap = $("suggested-tool"); clear(wrap);
+  const trigs = a.triggers || [];
+  let exId = "box";
+  if (trigs.includes("loneliness") || trigs.includes("selfdoubt")) exId = "reframe";
+  else if (trigs.includes("sleep")) exId = "478";
+  else if (trigs.includes("comparison")) exId = "reframe";
+  else if (a.sentiment != null && a.sentiment < -0.3) exId = "grounding";
+  const ex = EXERCISES.find((e) => e.id === exId);
+  if (!ex) return;
+  wrap.classList.remove("hidden");
+  const b = el("button", "btn btn--ghost btn--block", `${ex.icon} Try: ${ex.title}`);
+  b.type = "button";
+  b.addEventListener("click", () => openExercise(ex));
+  wrap.appendChild(b);
 }
 
 /* ---------- companion chat ---------- */
-function seedChat() {
-  addBubble("bot", "I'm here. What's weighing on you right now?");
-}
+function seedChat() { addBubble("bot", "I'm here. What's weighing on you right now?"); }
 function addBubble(role, text) {
   const b = el("div", "bubble " + (role === "user" ? "me" : "bot"), text);
-  $("chat").appendChild(b);
-  $("chat").scrollTop = $("chat").scrollHeight;
+  $("chat").appendChild(b); $("chat").scrollTop = $("chat").scrollHeight;
 }
-
+function renderChatSuggestions() {
+  const wrap = $("chat-suggestions"); if (!wrap) return; clear(wrap);
+  SUGGESTIONS.forEach((s) => {
+    const c = el("button", "chip chip--btn", s); c.type = "button";
+    c.addEventListener("click", () => { $("chat-input").value = s; $("chat-form").requestSubmit(); });
+    wrap.appendChild(c);
+  });
+}
 async function sendChat(e) {
   e.preventDefault();
-  const input = $("chat-input");
-  const text = input.value.trim();
-  if (!text) return;
+  const input = $("chat-input"); const text = input.value.trim(); if (!text) return;
   input.value = "";
-
-  // SAFETY GATE — every user turn.
-  if (assessRisk(text).level === "crisis") {
-    addBubble("user", text);
-    openCrisis();
-    return;
-  }
-
-  addBubble("user", text);
-  state.chat.push({ role: "user", text });
-
-  const thinking = el("div", "bubble bot", "…");
-  $("chat").appendChild(thinking);
-
+  if (assessRisk(text).level === "crisis") { addBubble("user", text); openCrisis(); return; }
+  addBubble("user", text); state.chat.push({ role: "user", text });
+  clear($("chat-suggestions"));
+  const thinking = el("div", "bubble bot", "…"); $("chat").appendChild(thinking);
   try {
-    const reply = await companionReply({
-      history: state.chat.slice(-8),
-      exam: state.profile.examLabel,
-      language: langName(state.profile.language),
-    });
+    const reply = await companionReply({ history: state.chat.slice(-8), exam: state.profile.examLabel, language: langMeta(getLang()).en });
     thinking.remove();
     const safe = reply && reply.trim() ? reply.trim() : fallbackReply();
-    addBubble("bot", safe);
-    state.chat.push({ role: "bot", text: safe });
+    addBubble("bot", safe); state.chat.push({ role: "bot", text: safe });
   } catch {
-    thinking.remove();
-    const fb = fallbackReply();
-    addBubble("bot", fb);
-    state.chat.push({ role: "bot", text: fb });
+    thinking.remove(); const fb = fallbackReply();
+    addBubble("bot", fb); state.chat.push({ role: "bot", text: fb });
   }
 }
-
 function fallbackReply() {
-  const options = [
-    "That sounds genuinely hard. Let's slow it down — take one steady breath with me. What's the single heaviest part right now?",
-    "I hear you. You don't have to solve all of it tonight. What's one small thing that would make the next hour a little lighter?",
-    "Thank you for saying it out loud. Comparison and pressure lie to us near exams. What would you tell a friend who felt this?",
+  const o = [
+    "That sounds genuinely hard. Let's slow it down — one steady breath. What's the single heaviest part right now?",
+    "I hear you. You don't have to solve all of it tonight. What's one small thing that would make the next hour lighter?",
+    "Thank you for saying it out loud. Pressure lies to us near exams. What would you tell a friend who felt this?",
   ];
-  return options[Math.floor(Math.random() * options.length)];
+  return o[Math.floor(Math.random() * o.length)];
 }
 
 /* ---------- insights ---------- */
 function renderInsights() {
   const entries = store.getEntries();
   const patterns = detectPatterns(entries);
-
-  const stats = $("insight-stats");
-  clear(stats);
+  const stats = $("insight-stats"); clear(stats);
   const streak = currentStreak(entries);
-  stats.appendChild(statBox(entries.length, "check-ins"));
-  stats.appendChild(statBox(patterns.avgMood != null ? patterns.avgMood : "—", "avg mood"));
-  stats.appendChild(statBox(streak, streak === 1 ? "day streak" : "day streak"));
-
-  const pw = $("pattern-week");
-  if (patterns.patternOfWeek) {
-    pw.textContent = patterns.patternOfWeek;
-    pw.classList.remove("hidden");
-  } else {
-    pw.classList.add("hidden");
-  }
-
-  // mood sparkline
-  const series = buildMoodSeries(entries).slice(-14);
-  const spark = $("mood-spark");
-  clear(spark);
-  $("spark-empty").classList.toggle("hidden", series.length > 1);
-  series.forEach((p) => {
-    const bar = el("div", "bar");
-    bar.style.height = (p.mood / 5) * 100 + "%";
-    bar.title = `${p.label}: ${p.mood}/5`;
-    bar.appendChild(el("span", null, p.label));
-    spark.appendChild(bar);
-  });
-
-  // trigger cloud
-  const cloud = buildTriggerCloud(patterns.triggerCounts);
-  const cloudEl = $("trigger-cloud");
-  clear(cloudEl);
-  $("cloud-empty").classList.toggle("hidden", cloud.length > 0);
-  cloud.forEach((c) => {
-    const t = el("span", "t", c.trigger);
-    t.style.fontSize = 0.85 + c.weight * 0.16 + "rem";
-    t.title = `${c.count} entries`;
-    cloudEl.appendChild(t);
-    cloudEl.appendChild(document.createTextNode(" "));
-  });
-}
-function statBox(value, label) {
-  const box = el("div", "box");
-  box.appendChild(el("b", null, String(value)));
-  box.appendChild(el("span", "muted", label));
-  return box;
-}
-
-/* ---------- toolkit ---------- */
-function renderToolkit() {
-  const list = $("toolkit-list");
-  clear(list);
-  TOOLKIT.forEach((tool) => {
-    const card = el("div", "tool");
-    card.appendChild(el("h3", null, tool.title));
-    card.appendChild(el("p", "muted", tool.desc));
-    if (tool.kind === "breathing") {
-      const circle = el("div", "breath-circle", "Breathe");
-      const btn = el("button", "btn btn--block", "Start 4-4-4-4");
-      btn.type = "button";
-      btn.addEventListener("click", () => runBreathing(circle, btn));
-      card.appendChild(circle);
-      card.appendChild(btn);
-    } else if (tool.kind === "steps") {
-      const ol = el("ol");
-      tool.steps.forEach((s) => ol.appendChild(el("li", null, s)));
-      card.appendChild(ol);
-    }
-    list.appendChild(card);
-  });
-}
-let breathTimer = null;
-function runBreathing(circle, btn) {
-  if (breathTimer) { clearInterval(breathTimer); breathTimer = null; circle.classList.remove("in"); circle.textContent = "Breathe"; btn.textContent = "Start 4-4-4-4"; return; }
-  btn.textContent = "Stop";
-  const phases = [["Breathe in", true], ["Hold", true], ["Breathe out", false], ["Hold", false]];
-  let i = 0;
-  const tick = () => {
-    const [label, big] = phases[i % 4];
-    circle.textContent = label;
-    circle.classList.toggle("in", big);
-    i++;
-  };
-  tick();
-  breathTimer = setInterval(tick, 4000);
-}
-
-/* ---------- crisis ---------- */
-function renderHelplines() {
-  const wrap = $("crisis-helplines");
-  clear(wrap);
-  HELPLINES.forEach((h) => {
-    const row = el("div", "help");
-    const left = el("div");
-    left.appendChild(el("div", "num", h.number));
-    left.appendChild(el("div", "muted", h.name + " · " + h.note));
-    const call = el("a", "btn btn--primary");
-    call.href = "tel:" + h.dial;
-    call.textContent = "Call";
-    row.appendChild(left);
-    row.appendChild(call);
-    wrap.appendChild(row);
-  });
-}
-function openCrisis() {
-  state.lastScreen = SCREENS.find((s) => !$(s).classList.contains("hidden")) || "screen-app";
-  show("screen-crisis");
-}
-
-/* ---------- settings ---------- */
-function saveSettings() {
-  setKeys({ gemini: $("set-gemini").value, groq: $("set-groq").value });
-  $("set-gemini").value = "";
-  $("set-groq").value = "";
-  alert("Keys saved for this session.");
-  show("screen-app");
-}
-
-/* ---------- events ---------- */
-function wireEvents() {
-  $("theme-btn").addEventListener("click", toggleTheme);
-  $("onb-start").addEventListener("click", startOnboarding);
-
-  document.querySelectorAll(".mood").forEach((b) =>
-    b.addEventListener("click", () => {
-      state.mood = Number(b.dataset.mood);
-      document.querySelectorAll(".mood").forEach((m) =>
-        m.setAttribute("aria-pressed", String(m === b))
-      );
-    })
-  );
-  $("checkin-submit").addEventListener("click", submitCheckin);
-  $("goto-talk").addEventListener("click", () => switchTab("talk"));
-
-  document.querySelectorAll(".tab").forEach((b) =>
-    b.addEventListener("click", () => switchTab(b.dataset.tab))
-  );
-
-  $("chat-form").addEventListener("submit", sendChat);
-
-  $("sos-btn").addEventListener("click", openCrisis);
-  $("crisis-back").addEventListener("click", () => show(state.lastScreen));
-
-  $("settings-btn").addEventListener("click", () => show("screen-settings"));
-  $("set-back").addEventListener("click", () => show(state.profile ? "screen-app" : "screen-onboard"));
-  $("set-save").addEventListener("click", saveS
+  stats.appendChild(statBox(entries.length, t("checkins")));
+  stats.appendChild(statBox(patterns.avgMood != nul

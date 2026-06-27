@@ -127,15 +127,12 @@ Do not diagnose. Keep it brief and kind.`;
   }
 }
 
-// ---- Capability 2: companion chat ----
-// Caller MUST pre-screen with safety.assessRisk and short-circuit on "crisis".
-export async function companionReply({ history, exam, language }) {
+// ---- Capability 3: translate the UI dictionary into any language ----
+// Returns a translated {key: string} object, or null if AI is unavailable/failed.
+// Used by i18n.js to support all 22 scheduled languages without shipping 22 dicts.
+export async function translateUI(enDict, langName) {
+  if (!aiAvailable()) return null;
   const sys =
-    SAFETY_SYSTEM_PROMPT +
-    `\n\nContext: the student is preparing for ${exam}. Reply in ${language}. Keep it to 2-5 short sentences.`;
-  // Flatten short history into a single user turn for provider-agnostic simplicity.
-  const convo = history
-    .map((m) => (m.role === "user" ? "Student: " : "MannMitra: ") + m.text)
-    .join("\n");
-  return generate(sys, convo + "\nMannMitra:", false);
-}
+    "You are a professional UI localizer. Translate the VALUES of this JSON UI string map into " +
+    langName +
+    ". Keep keys identical. Keep it natural, warm, and concise. Preserve emojis and the placeholder (112), and keep the brand name 'MannMitra' un

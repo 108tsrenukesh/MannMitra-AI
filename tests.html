@@ -15,7 +15,7 @@
   </main>
   <script type="module">
     import { runTests } from "./assets/js/app.test.js";
-    const { passed, failed, results } = runTests();
+    const { passed, failed, results } = await runTests();
     const s = document.getElementById("summary");
     s.textContent = `${passed} passed, ${failed} failed`;
     s.style.borderLeftColor = failed === 0 ? "var(--accent)" : "var(--danger)";

@@ -1,5 +1,5 @@
 // ai.js — AI layer. Gemini primary → Groq fallback → deterministic (handled by caller).
-// Capabilities: analyse entry, companion chat, translate UI, brain-dump, AI crisis screen.
+// Capabilities: analyse entry (with folded crisis flag), companion chat, translate UI, brain-dump.
 // SAFETY_SYSTEM_PROMPT is prepended to relevant calls. Keys are runtime/CI, never in source.
 import { SAFETY_SYSTEM_PROMPT } from "./safety.js";
 import { deterministicReflection, bucketBrainDump } from "./analysis.js";
@@ -60,9 +60,9 @@ function parseJson(text) {
 export async function analyseEntry({ text, mood, exam, language }) {
   if (!aiAvailable()) return deterministicReflection(text, mood);
   const sys = SAFETY_SYSTEM_PROMPT + "\n\nTASK: Analyse one journal entry. Return ONLY minified JSON: " +
-    '{"sentiment":<-1..1>,"triggers":[<lowercase tags like comparison,sleep,parents,mocks,burnout,selfdoubt,loneliness,time,health>],"reflection":"<=2 warm non-clinical sentences","coping":["<one tiny step>"],"insight":"<one gentle observation>"} Do not diagnose. Brief and kind.';
+    '{"sentiment":<-1..1>,"triggers":[<lowercase tags like comparison,sleep,parents,mocks,burnout,selfdoubt,loneliness,time,health>],"reflection":"<=2 warm non-clinical sentences","coping":["<one tiny step>"],"insight":"<one gentle observation>","crisis":<true ONLY if the entry shows suicidal thoughts, self-harm intent or a mental-health emergency; else false>} Do not diagnose. Set crisis precisely. Brief and kind.';
   const user = "Exam: " + exam + ". Mood (1-5): " + mood + ". Language for text fields: " + language + ".\nEntry: \"\"\"" + text + "\"\"\"";
-  try { const out = parseJson(await generate(sys, user, true)); out.source = "ai"; out.triggers = Array.isArray(out.triggers) ? out.triggers : []; out.coping = Array.isArray(out.coping) ? out.coping : []; return out; }
+  try { const out = parseJson(await generate(sys, user, true)); out.source = "ai"; out.triggers = Array.isArray(out.triggers) ? out.triggers : []; out.coping = Array.isArray(out.coping) ? out.coping : []; out.crisis = out.crisis === true; return out; }
   catch { return deterministicReflection(text, mood); }
 }
 
@@ -88,10 +88,3 @@ export async function brainDump({ text, exam, language }) {
   catch { return bucketBrainDump(text); }
 }
 
-// AI semantic crisis screen — SECOND layer only. Local keyword gate runs first & offline.
-// Returns true only on clear risk signals. Any error/uncertainty => false (local gate already cleared).
-export async function assessRiskAI(text) {
-  if (!aiAvailable() || !text) return false;
-  const sys = "You screen a student wellbeing message for crisis risk (suicidal thoughts, self-harm intent, or a mental-health emergency). If there is a genuine, clear indication of such risk, return {\"crisis\":true}; otherwise {\"crisis\":false}. Respond ONLY with that JSON. Ordinary exam stress, sadness, or frustration is NOT a crisis.";
-  try { const out = parseJson(await generate(sys, text, true)); return out.crisis === true; } catch { return false; }
-}

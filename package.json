@@ -1,0 +1,19 @@
+{
+  "name": "mannmitra",
+  "version": "1.0.0",
+  "description": "A private, multilingual GenAI wellbeing companion for Indian exam aspirants.",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "serve": "python -m http.server 8000",
+    "lint": "eslint assets/js",
+    "format": "prettier --write \"assets/**/*.{js,css}\" \"*.{html,json,md}\"",
+    "test": "node --test || true"
+  },
+  "devDependencies": {
+    "eslint": "^9.0.0",
+    "prettier": "^3.0.0"
+  },
+  "keywords": ["mental-health", "genai", "gemini", "groq", "pwa", "students", "wellbeing"]
+}

@@ -3,7 +3,7 @@
 
 import { EXAMS, LANGUAGES, HELPLINES, EXERCISES, SUGGESTIONS, QUOTES } from "./config.js";
 import { assessRisk } from "./safety.js";
-import { analyseEntry, companionReply, setKeys, aiAvailable, translateUI, brainDump, assessRiskAI, getAINote } from "./ai.js";
+import { analyseEntry, companionReply, setKeys, aiAvailable, translateUI, brainDump, getAINote } from "./ai.js";
 import { deterministicReflection, detectPatterns } from "./analysis.js";
 import * as store from "./storage.js";
 import { buildMoodSeries, buildTriggerCloud, currentStreak } from "./insights.js";
@@ -148,13 +148,13 @@ async function submitCheckin() {
   if (assessRisk(text).level === "crisis") { openCrisis(); return; }          // offline gate (primary)
   const btn = $("checkin-submit"); btn.disabled = true;
   $("checkin-status").textContent = aiAvailable() ? "MannMitra is reading with care…" : "Reflecting…";
-  if (text && aiAvailable()) { try { if (await assessRiskAI(text)) { btn.disabled = false; openCrisis(); return; } } catch {} }  // AI second layer (online)
   let analysis;
   try { analysis = await analyseEntry({ text, mood: state.mood, exam: state.profile.examLabel, language: langMeta(getLang()).en }); }
   catch { analysis = deterministicReflection(text, state.mood); }
+  if (analysis && analysis.crisis) { btn.disabled = false; openCrisis(); return; }  // risk folded into the single AI call
   store.addEntry({ mood: state.mood, text, analysis });
   renderReflection(analysis);
-  if (analysis.source === "ai") $("checkin-status").textContent = "";
+  if (analysis.source === "ai") $("checkin-status").textContent = "✨ Reflected by Gemini AI";
   else if (getAINote() === "limit") $("checkin-status").textContent = "🚦 Today's AI limit is reached — I'm running fully in offline mode (still 100% helpful!). Add your own key in ⚙️ Settings to continue with AI; the limit refreshes later.";
   else $("checkin-status").textContent = "Offline reflection — the hosted version has AI on by default; or add your own key in ⚙️ Settings.";
   btn.disabled = false; $("journal").value = ""; state.mood = null;
@@ -198,7 +198,6 @@ async function sendChat(e) {
   if (assessRisk(text).level === "crisis") { addBubble("user", text); openCrisis(); return; }   // offline gate
   addBubble("user", text); state.chat.push({ role: "user", text }); clear($("chat-suggestions"));
   const thinking = el("div", "bubble bot", "…"); $("chat").appendChild(thinking);
-  if (aiAvailable()) { try { if (await assessRiskAI(text)) { thinking.remove(); openCrisis(); return; } } catch {} }  // AI second layer
   try {
     const reply = await companionReply({ history: state.chat.slice(-8), exam: state.profile.examLabel, language: langMeta(getLang()).en });
     thinking.remove(); const safe = reply && reply.trim() ? reply.trim() : fallbackReply(); addBubble("bot", safe); state.chat.push({ role: "bot", text: safe });

@@ -31,6 +31,7 @@ function show(id) {
 
 /* ---------- init ---------- */
 function init() {
+  applyStoredTheme();
   // populate selects
   EXAMS.forEach((e) => $("onb-exam").appendChild(new Option(e.label, e.id)));
   LANGUAGES.forEach((l) => $("onb-lang").appendChild(new Option(l.name + " · " + l.en, l.code)));
@@ -45,6 +46,23 @@ function init() {
   } else {
     show("screen-onboard");
   }
+}
+
+/* ---------- theme ---------- */
+function applyStoredTheme() {
+  const t = localStorage.getItem("mm_theme") || "dark";
+  setTheme(t);
+}
+function setTheme(t) {
+  if (t === "light") document.documentElement.setAttribute("data-theme", "light");
+  else document.documentElement.removeAttribute("data-theme");
+  localStorage.setItem("mm_theme", t);
+  const btn = $("theme-btn");
+  if (btn) btn.textContent = t === "light" ? "☀️" : "🌙";
+}
+function toggleTheme() {
+  const now = localStorage.getItem("mm_theme") === "light" ? "dark" : "light";
+  setTheme(now);
 }
 
 /* ---------- onboarding ---------- */
@@ -315,6 +333,7 @@ function saveSettings() {
 
 /* ---------- events ---------- */
 function wireEvents() {
+  $("theme-btn").addEventListener("click", toggleTheme);
   $("onb-start").addEventListener("click", startOnboarding);
 
   document.querySelectorAll(".mood").forEach((b) =>
@@ -339,27 +358,4 @@ function wireEvents() {
 
   $("settings-btn").addEventListener("click", () => show("screen-settings"));
   $("set-back").addEventListener("click", () => show(state.profile ? "screen-app" : "screen-onboard"));
-  $("set-save").addEventListener("click", saveSettings);
-  $("data-export").addEventListener("click", exportData);
-  $("data-delete").addEventListener("click", deleteData);
-}
-
-function exportData() {
-  const blob = new Blob([store.exportData()], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "mannmitra-data.json";
-  a.click();
-  URL.revokeObjectURL(url);
-}
-function deleteData() {
-  if (confirm("Delete all your check-ins and profile from this device? This can't be undone.")) {
-    store.deleteAll();
-    state.profile = null;
-    state.chat = [];
-    show("screen-onboard");
-  }
-}
-
-// Regis
+  $("set-save").addEventListener("click", saveS

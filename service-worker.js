@@ -1,6 +1,6 @@
 // service-worker.js — offline-first shell so the toolkit & UI work without network.
 // Bump CACHE_NAME on each release to avoid stale assets.
-const CACHE_NAME = "mannmitra-v1";
+const CACHE_NAME = "mannmitra-v2";
 const ASSETS = [
   "./",
   "./index.html",

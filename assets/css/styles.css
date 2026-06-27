@@ -18,6 +18,26 @@
   --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
+/* Light theme — applied when <html data-theme="light">. WCAG-contrast checked. */
+[data-theme="light"] {
+  --bg: #f3f5fb;
+  --bg-2: #e9edf7;
+  --surface: #ffffff;
+  --surface-2: #eef2fa;
+  --border: #d2d9ea;
+  --text: #1a2030;
+  --muted: #5b6680;
+  --accent: #138a72;
+  --accent-ink: #ffffff;
+  --accent-2: #3f50bf;
+  --warn: #9a6b00;
+  --danger: #c0392b;
+  --danger-bg: #fbe7e4;
+}
+[data-theme="light"] body {
+  background: radial-gradient(1200px 600px at 50% -10%, #eef2fb 0%, var(--bg) 60%);
+}
+
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
 body {
@@ -130,19 +150,3 @@ textarea { resize: vertical; min-height: 110px; }
 .crisis { border: 1px solid var(--danger); background: linear-gradient(180deg, rgba(255,138,138,.08), transparent); }
 .crisis h2 { color: var(--danger); }
 .help { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; margin: 8px 0; background: var(--bg-2); }
-.help .num { font-weight: 800; color: var(--accent); }
-.help a { color: var(--accent-ink); }
-
-/* ===== Misc ===== */
-.row { display: flex; gap: 10px; flex-wrap: wrap; }
-.row > * { flex: 1; }
-.footer-note { color: var(--muted); font-size: .8rem; text-align: center; padding: 18px 0 28px; }
-a { color: var(--accent); }
-
-@media (prefers-reduced-motion: reduce) {
-  html { scroll-behavior: auto; }
-  .breath-circle { transition: none; }
-}
-@media (max-width: 520px) {
-  .hero h1 { font-size: 1.6rem; }
-}

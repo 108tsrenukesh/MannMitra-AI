@@ -1,41 +1,14 @@
 // config.js — static configuration: helplines, languages, exam types, coping content.
 // No secrets here. API keys are entered at runtime (see ai.js) or injected by CI.
 
-// India crisis & support helplines (verified national resources).
 export const HELPLINES = [
-  {
-    name: "Tele-MANAS (Govt. of India)",
-    number: "14416",
-    dial: "14416",
-    note: "Free · 24×7 · 20 languages",
-  },
-  {
-    name: "Tele-MANAS (alt.)",
-    number: "1-800-891-4416",
-    dial: "18008914416",
-    note: "Free · 24×7",
-  },
-  {
-    name: "Vandrevala Foundation",
-    number: "1860-266-2345",
-    dial: "18602662345",
-    note: "24×7 counselling",
-  },
-  {
-    name: "iCall (TISS)",
-    number: "022-2552-1111",
-    dial: "02225521111",
-    note: "Mon–Sat, 8am–10pm",
-  },
-  {
-    name: "AASRA",
-    number: "+91-98204-66726",
-    dial: "+919820466726",
-    note: "24×7 suicide prevention",
-  },
+  { name: "Tele-MANAS (Govt. of India)", number: "14416", dial: "14416", note: "Free · 24×7 · 20 languages" },
+  { name: "Tele-MANAS (alt.)", number: "1-800-891-4416", dial: "18008914416", note: "Free · 24×7" },
+  { name: "Vandrevala Foundation", number: "1860-266-2345", dial: "18602662345", note: "24×7 counselling" },
+  { name: "iCall (TISS)", number: "022-2552-1111", dial: "02225521111", note: "Mon–Sat, 8am–10pm" },
+  { name: "AASRA", number: "+91-98204-66726", dial: "+919820466726", note: "24×7 suicide prevention" },
 ];
 
-// Exam contexts — used to tailor prompts and check-in copy.
 export const EXAMS = [
   { id: "neet", label: "NEET (medical)" },
   { id: "jee", label: "JEE (engineering)" },
@@ -46,8 +19,7 @@ export const EXAMS = [
   { id: "other", label: "Other / board exams" },
 ];
 
-// 22 scheduled languages of the Eighth Schedule + English (23 total).
-// `name` is the native script label; `en` is the English name the model understands.
+// 22 scheduled languages of the Eighth Schedule + English (+ Hinglish convenience).
 export const LANGUAGES = [
   { code: "en", name: "English", en: "English" },
   { code: "hi", name: "हिन्दी", en: "Hindi" },
@@ -70,58 +42,9 @@ export const LANGUAGES = [
   { code: "sd", name: "سنڌي", en: "Sindhi" },
   { code: "kok", name: "कोंकणी", en: "Konkani" },
   { code: "doi", name: "डोगरी", en: "Dogri" },
-  { code: "mni", name: " মৈতৈলোন্", en: "Manipuri (Meitei)" },
+  { code: "mni", name: "মৈতৈলোন্", en: "Manipuri (Meitei)" },
   { code: "brx", name: "बड़ो", en: "Bodo" },
   { code: "sa", name: "संस्कृतम्", en: "Sanskrit" },
-];
-
-// Offline wellbeing toolkit — always available, no network/AI needed.
-export const TOOLKIT = [
-  {
-    id: "breathing",
-    title: "Box breathing",
-    desc: "Calm your nervous system in 60 seconds.",
-    kind: "breathing",
-  },
-  {
-    id: "grounding",
-    title: "5-4-3-2-1 grounding",
-    desc: "Pull your mind out of a spiral and back to now.",
-    kind: "steps",
-    steps: [
-      "Name 5 things you can see right now.",
-      "Name 4 things you can feel (chair, feet, air).",
-      "Name 3 things you can hear.",
-      "Name 2 things you can smell.",
-      "Name 1 thing you can taste — and take a slow breath.",
-    ],
-  },
-  {
-    id: "break",
-    title: "Take a real break",
-    desc: "A 5-minute reset beats another hour of tired study.",
-    kind: "steps",
-    steps: [
-      "Stand up and stretch your arms overhead.",
-      "Drink a glass of water.",
-      "Look out of a window at something far away for 30s.",
-      "Walk to another room and back.",
-      "Return with one small, doable next task in mind.",
-    ],
-  },
-  {
-    id: "reframe",
-    title: "Reframe a harsh thought",
-    desc: "Swap an all-or-nothing thought for a kinder, truer one.",
-    kind: "steps",
-    steps: [
-      "Write the exact harsh thought ('I'll never clear this').",
-      "Ask: would I say this to a friend in my place?",
-      "Find one piece of evidence it isn't fully true.",
-      "Rewrite it fairly ('This topic is hard; I can improve it').",
-      "Notice your shoulders drop a little.",
-    ],
-  },
 ];
 
 // Deterministic coping suggestions keyed by detected trigger (fallback when AI is off).
@@ -137,3 +60,40 @@ export const COPING_BY_TRIGGER = {
   health: "Your body keeps the score. A short walk and water count as studying-support.",
   general: "Be as patient with yourself as you'd be with a friend sitting your exam.",
 };
+
+// Richer toolkit. "phased" = animated timed circle; "steps" = a static checklist.
+export const EXERCISES = [
+  { id: "box", icon: "🫁", title: "Box breathing", desc: "4-4-4-4 — instant calm.", kind: "phased",
+    phases: [ { label: "Breathe in", secs: 4, big: true }, { label: "Hold", secs: 4, big: true }, { label: "Breathe out", secs: 4, big: false }, { label: "Hold", secs: 4, big: false } ] },
+  { id: "478", icon: "🌬️", title: "4-7-8 breathing", desc: "Eases anxiety, helps sleep.", kind: "phased",
+    phases: [ { label: "Breathe in", secs: 4, big: true }, { label: "Hold", secs: 7, big: true }, { label: "Breathe out", secs: 8, big: false } ] },
+  { id: "ocean", icon: "🌊", title: "Ocean breath", desc: "Slow, steady, grounding.", kind: "phased",
+    phases: [ { label: "Breathe in", secs: 5, big: true }, { label: "Breathe out", secs: 7, big: false } ] },
+  { id: "grounding", icon: "🌿", title: "5-4-3-2-1 grounding", desc: "Pull out of a spiral.", kind: "steps",
+    steps: [ "Name 5 things you can see right now.", "Name 4 things you can feel (chair, feet, air).", "Name 3 things you can hear.", "Name 2 things you can smell.", "Name 1 thing you can taste — and take a slow breath." ] },
+  { id: "pmr", icon: "🧘", title: "Quick muscle relaxation", desc: "Tense, release, let go.", kind: "phased",
+    phases: [ { label: "Tense your fists", secs: 5, big: true }, { label: "Release, notice the calm", secs: 8, big: false }, { label: "Tense your shoulders", secs: 5, big: true }, { label: "Release, breathe", secs: 8, big: false } ] },
+  { id: "reframe", icon: "💭", title: "Reframe a harsh thought", desc: "Swap it for a kinder truth.", kind: "steps",
+    steps: [ "Write the exact harsh thought ('I'll never clear this').", "Ask: would I say this to a friend in my place?", "Find one piece of evidence it isn't fully true.", "Rewrite it fairly ('This topic is hard; I can improve it').", "Notice your shoulders drop a little." ] },
+  { id: "gratitude", icon: "🙏", title: "Gratitude note", desc: "Name 3 good things — a proven mood lift.", kind: "steps",
+    steps: [ "Write down 3 things that went okay today, however small.", "For each, note why it happened or what it meant to you.", "Notice you can usually find something, even on hard days." ] },
+  { id: "connect", icon: "🤝", title: "Reach out to someone", desc: "Connection is the strongest buffer.", kind: "steps",
+    steps: [ "Pick one person you trust — a friend, sibling, or parent.", "Send a short message: even 'having a rough day, can we talk?'", "You do not have to explain everything — just open the door." ] },
+];
+
+export const SUGGESTIONS = [
+  "I'm stressed about my exam",
+  "I can't focus today",
+  "I need some motivation",
+  "Help me calm down",
+  "I'm comparing myself to everyone",
+];
+
+export const QUOTES = [
+  { text: "You don't have to be perfect to be worthy of rest.", author: "—" },
+  { text: "A mock is data, not a verdict.", author: "—" },
+  { text: "Compare today-you to yesterday-you, not to a topper.", author: "—" },
+  { text: "Rest is not laziness — it's how your brain saves what you studied.", author: "—" },
+  { text: "It's okay to not be okay, as long as you don't give up.", author: "Karen Salmansohn" },
+  { text: "Small wins build momentum. Pick one tiny next step.", author: "—" },
+];

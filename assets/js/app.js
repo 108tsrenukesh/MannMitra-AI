@@ -1,5 +1,5 @@
-// app.js — UI controller. Screen routing, i18n, optional PIN lock, safe DOM rendering,
-// and the crisis safety gate that sits in front of every AI interaction.
+// app.js — UI controller. Screen routing, i18n, optional PIN lock, safety plan,
+// safe DOM rendering, and the crisis safety gate in front of every AI interaction.
 
 import { EXAMS, LANGUAGES, HELPLINES, EXERCISES, SUGGESTIONS, QUOTES } from "./config.js";
 import { assessRisk } from "./safety.js";
@@ -7,13 +7,12 @@ import { analyseEntry, companionReply, setKeys, aiAvailable, translateUI } from 
 import { deterministicReflection, detectPatterns } from "./analysis.js";
 import * as store from "./storage.js";
 import { buildMoodSeries, buildTriggerCloud, currentStreak } from "./insights.js";
-import { t, setLang, applyTranslations, getLang, STRINGS } from "./i18n.js";
+import { t, setLang, getLang, STRINGS } from "./i18n.js";
 import { hasPin, setPin, verifyPin, clearPin } from "./auth.js";
 
 const $ = (id) => document.getElementById(id);
 const state = { profile: null, mood: null, chat: [], lastScreen: "screen-app" };
 
-/* ---------- safe-DOM helpers ---------- */
 function el(tag, cls, text) {
   const n = document.createElement(tag);
   if (cls) n.className = cls;
@@ -23,14 +22,12 @@ function el(tag, cls, text) {
 function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
 function langMeta(code) { return LANGUAGES.find((l) => l.code === code) || LANGUAGES[0]; }
 
-/* ---------- screens ---------- */
 const SCREENS = ["screen-lock", "screen-onboard", "screen-app", "screen-crisis", "screen-settings", "screen-pinset"];
 function show(id) {
   SCREENS.forEach((s) => $(s).classList.toggle("hidden", s !== id));
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
-/* ---------- theme ---------- */
 function applyStoredTheme() { setTheme(localStorage.getItem("mm_theme") || "dark"); }
 function setTheme(tm) {
   if (tm === "light") document.documentElement.setAttribute("data-theme", "light");
@@ -40,20 +37,17 @@ function setTheme(tm) {
 }
 function toggleTheme() { setTheme(localStorage.getItem("mm_theme") === "light" ? "dark" : "light"); }
 
-/* ---------- language ---------- */
 async function applyLanguage(code, statusEl) {
   const meta = langMeta(code);
   const needsAI = !STRINGS[code] && !localStorage.getItem("mm_i18n_" + code);
   if (needsAI && statusEl) statusEl.textContent = aiAvailable()
-    ? `Translating to ${meta.en}…`
-    : `Showing English (add an AI key to auto-translate to ${meta.en}).`;
+    ? "Translating to " + meta.en + "…"
+    : "Showing English (add an AI key to auto-translate to " + meta.en + ").";
   await setLang(code, translateUI, meta.en);
-  // refresh JS-rendered, non-static text
   renderHelplines(); renderToolkit(); renderQuote(); renderGreeting(); renderChatSuggestions();
   if (statusEl) statusEl.textContent = "";
 }
 
-/* ---------- init ---------- */
 async function init() {
   applyStoredTheme();
   EXAMS.forEach((e) => $("onb-exam").appendChild(new Option(e.label, e.id)));
@@ -61,40 +55,31 @@ async function init() {
     $("onb-lang").appendChild(new Option(l.name + " · " + l.en, l.code));
     $("set-lang").appendChild(new Option(l.name + " · " + l.en, l.code));
   });
-
   renderHelplines();
   renderToolkit();
   wireEvents();
+  injectSettingsExtras();
 
   state.profile = store.getProfile();
-  if (state.profile?.language) {
+  if (state.profile && state.profile.language) {
     $("onb-lang").value = state.profile.language;
     $("set-lang").value = state.profile.language;
     await applyLanguage(state.profile.language);
   }
   refreshPinStatus();
 
-  // Route: PIN lock → app/onboard
-  if (hasPin()) {
-    openLock();
-  } else if (state.profile) {
-    enterApp();
-  } else {
-    show("screen-onboard");
-  }
+  if (hasPin()) openLock();
+  else if (state.profile) enterApp();
+  else show("screen-onboard");
 }
 
-/* ---------- PIN lock ---------- */
+/* ---------- PIN ---------- */
 function renderPinPad(padId, dotsId, onDigit) {
-  const pad = $(padId);
-  clear(pad);
-  const keys = ["1","2","3","4","5","6","7","8","9","","0","del"];
-  keys.forEach((k) => {
+  const pad = $(padId); clear(pad);
+  ["1","2","3","4","5","6","7","8","9","","0","del"].forEach((k) => {
     if (k === "") { pad.appendChild(el("span")); return; }
     const b = el("button", "pin-key", k === "del" ? "⌫" : k);
-    b.type = "button";
-    b.addEventListener("click", () => onDigit(k));
-    pad.appendChild(b);
+    b.type = "button"; b.addEventListener("click", () => onDigit(k)); pad.appendChild(b);
   });
   updateDots(dotsId, 0);
 }
@@ -102,7 +87,6 @@ function updateDots(dotsId, n) {
   const d = $(dotsId); clear(d);
   for (let i = 0; i < 4; i++) d.appendChild(el("span", "pin-dot" + (i < n ? " filled" : "")));
 }
-
 let lockBuf = "";
 function openLock() {
   lockBuf = "";
@@ -110,18 +94,12 @@ function openLock() {
     lockBuf = k === "del" ? lockBuf.slice(0, -1) : (lockBuf.length < 4 ? lockBuf + k : lockBuf);
     updateDots("lock-dots", lockBuf.length);
     if (lockBuf.length === 4) {
-      if (await verifyPin(lockBuf)) {
-        state.profile ? enterApp() : show("screen-onboard");
-      } else {
-        $("lock-error").textContent = "Incorrect PIN. Try again.";
-        lockBuf = ""; updateDots("lock-dots", 0);
-        setTimeout(() => ($("lock-error").textContent = ""), 1500);
-      }
+      if (await verifyPin(lockBuf)) { state.profile ? enterApp() : show("screen-onboard"); }
+      else { $("lock-error").textContent = "Incorrect PIN. Try again."; lockBuf = ""; updateDots("lock-dots", 0); setTimeout(() => ($("lock-error").textContent = ""), 1500); }
     }
   });
   show("screen-lock");
 }
-
 let pinsetBuf = "", pinsetFirst = "";
 function openPinSet() {
   pinsetBuf = ""; pinsetFirst = "";
@@ -130,25 +108,14 @@ function openPinSet() {
     pinsetBuf = k === "del" ? pinsetBuf.slice(0, -1) : (pinsetBuf.length < 4 ? pinsetBuf + k : pinsetBuf);
     updateDots("pinset-dots", pinsetBuf.length);
     if (pinsetBuf.length === 4) {
-      if (!pinsetFirst) {
-        pinsetFirst = pinsetBuf; pinsetBuf = "";
-        $("pinset-prompt").textContent = "Re-enter to confirm";
-        updateDots("pinset-dots", 0);
-      } else if (pinsetFirst === pinsetBuf) {
-        await setPin(pinsetBuf);
-        refreshPinStatus();
-        show("screen-settings");
-      } else {
-        $("pinset-prompt").textContent = "Didn't match — choose again";
-        pinsetFirst = ""; pinsetBuf = ""; updateDots("pinset-dots", 0);
-      }
+      if (!pinsetFirst) { pinsetFirst = pinsetBuf; pinsetBuf = ""; $("pinset-prompt").textContent = "Re-enter to confirm"; updateDots("pinset-dots", 0); }
+      else if (pinsetFirst === pinsetBuf) { await setPin(pinsetBuf); refreshPinStatus(); show("screen-settings"); }
+      else { $("pinset-prompt").textContent = "Didn't match — choose again"; pinsetFirst = ""; pinsetBuf = ""; updateDots("pinset-dots", 0); }
     }
   });
   show("screen-pinset");
 }
-function refreshPinStatus() {
-  $("pin-status").textContent = hasPin() ? t("pin_on") : "No PIN set.";
-}
+function refreshPinStatus() { $("pin-status").textContent = hasPin() ? t("pin_on") : "No PIN set."; }
 
 /* ---------- onboarding ---------- */
 function startOnboarding() {
@@ -164,26 +131,25 @@ function startOnboarding() {
 function enterApp() {
   show("screen-app");
   renderGreeting(); renderQuote(); renderChatSuggestions(); renderExam();
-  switchTab("checkin");
-  renderInsights();
+  switchTab("checkin"); renderInsights();
 }
 function renderGreeting() {
   if (!state.profile) return;
   const h = new Date().getHours();
   const g = h < 12 ? t("greeting_morning") : h < 17 ? t("greeting_afternoon") : t("greeting_evening");
-  const who = state.profile.nickname ? `, ${state.profile.nickname}` : "";
-  $("greeting").textContent = `${g}${who}.`;
+  const who = state.profile.nickname ? ", " + state.profile.nickname : "";
+  $("greeting").textContent = g + who + ".";
 }
 function renderQuote() {
   const q = QUOTES[Math.floor(Math.random() * QUOTES.length)];
   const card = $("quote-card"); clear(card);
-  card.appendChild(el("p", "qt", `“${q.text}”`));
+  card.appendChild(el("p", "qt", "“" + q.text + "”"));
   if (q.author && q.author !== "—") card.appendChild(el("p", "qa", "— " + q.author));
 }
 
 /* ---------- tabs ---------- */
 function switchTab(name) {
-  ["checkin","talk","insights","toolkit","exam"].forEach((t2) => $("tab-" + t2).classList.toggle("hidden", t2 !== name));
+  ["checkin","talk","insights","toolkit","exam"].forEach((x) => $("tab-" + x).classList.toggle("hidden", x !== name));
   document.querySelectorAll(".tab").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === name)));
   if (name === "insights") renderInsights();
   if (name === "exam") renderExam();
@@ -195,24 +161,18 @@ async function submitCheckin() {
   const text = $("journal").value.trim();
   if (!state.mood && !text) { $("checkin-status").textContent = "Pick a mood or jot a line — whatever's easier."; return; }
   if (assessRisk(text).level === "crisis") { openCrisis(); return; }
-
   const btn = $("checkin-submit"); btn.disabled = true;
   $("checkin-status").textContent = aiAvailable() ? "MannMitra is reading with care…" : "Reflecting…";
-
   let analysis;
-  try {
-    analysis = await analyseEntry({ text, mood: state.mood, exam: state.profile.examLabel, language: langMeta(getLang()).en });
-  } catch { analysis = deterministicReflection(text, state.mood); }
-
+  try { analysis = await analyseEntry({ text, mood: state.mood, exam: state.profile.examLabel, language: langMeta(getLang()).en }); }
+  catch { analysis = deterministicReflection(text, state.mood); }
   store.addEntry({ mood: state.mood, text, analysis });
   renderReflection(analysis);
-  $("checkin-status").textContent = analysis.source === "ai" ? "" : "Offline reflection (add an AI key in ⚙️ for richer replies).";
+  $("checkin-status").textContent = analysis.source === "ai" ? "" : "Offline reflection (add an AI key in settings for richer replies).";
   btn.disabled = false;
-  $("journal").value = "";
-  state.mood = null;
+  $("journal").value = ""; state.mood = null;
   document.querySelectorAll(".mood").forEach((m) => m.setAttribute("aria-pressed", "false"));
 }
-
 function renderReflection(a) {
   $("reflection-out").classList.remove("hidden");
   $("reflection-text").textContent = a.reflection || a.insight || "Thanks for checking in.";
@@ -222,26 +182,23 @@ function renderReflection(a) {
   (a.coping || []).forEach((c) => cop.appendChild(el("li", null, c)));
   renderSuggestedTool(a);
 }
-
-// Adaptive mindfulness: pick the exercise that fits the detected state.
 function renderSuggestedTool(a) {
   const wrap = $("suggested-tool"); clear(wrap);
   const trigs = a.triggers || [];
   let exId = "box";
-  if (trigs.includes("loneliness") || trigs.includes("selfdoubt")) exId = "reframe";
+  if (trigs.includes("loneliness")) exId = "connect";
+  else if (trigs.includes("selfdoubt") || trigs.includes("comparison")) exId = "reframe";
   else if (trigs.includes("sleep")) exId = "478";
-  else if (trigs.includes("comparison")) exId = "reframe";
   else if (a.sentiment != null && a.sentiment < -0.3) exId = "grounding";
   const ex = EXERCISES.find((e) => e.id === exId);
   if (!ex) return;
   wrap.classList.remove("hidden");
-  const b = el("button", "btn btn--ghost btn--block", `${ex.icon} Try: ${ex.title}`);
-  b.type = "button";
-  b.addEventListener("click", () => openExercise(ex));
+  const b = el("button", "btn btn--ghost btn--block", ex.icon + " Try: " + ex.title);
+  b.type = "button"; b.addEventListener("click", () => openExercise(ex));
   wrap.appendChild(b);
 }
 
-/* ---------- companion chat ---------- */
+/* ---------- chat ---------- */
 function seedChat() { addBubble("bot", "I'm here. What's weighing on you right now?"); }
 function addBubble(role, text) {
   const b = el("div", "bubble " + (role === "user" ? "me" : "bot"), text);
@@ -268,10 +225,7 @@ async function sendChat(e) {
     thinking.remove();
     const safe = reply && reply.trim() ? reply.trim() : fallbackReply();
     addBubble("bot", safe); state.chat.push({ role: "bot", text: safe });
-  } catch {
-    thinking.remove(); const fb = fallbackReply();
-    addBubble("bot", fb); state.chat.push({ role: "bot", text: fb });
-  }
+  } catch { thinking.remove(); const fb = fallbackReply(); addBubble("bot", fb); state.chat.push({ role: "bot", text: fb }); }
 }
 function fallbackReply() {
   const o = [
@@ -289,4 +243,212 @@ function renderInsights() {
   const stats = $("insight-stats"); clear(stats);
   const streak = currentStreak(entries);
   stats.appendChild(statBox(entries.length, t("checkins")));
-  stats.appendChild(statBox(patterns.avgMood != nul
+  stats.appendChild(statBox(patterns.avgMood != null ? patterns.avgMood : "—", t("avg_mood")));
+  stats.appendChild(statBox(streak, t("streak")));
+  const pw = $("pattern-week");
+  if (patterns.patternOfWeek) { pw.textContent = patterns.patternOfWeek; pw.classList.remove("hidden"); }
+  else pw.classList.add("hidden");
+  const series = buildMoodSeries(entries).slice(-14);
+  const spark = $("mood-spark"); clear(spark);
+  $("spark-empty").classList.toggle("hidden", series.length > 1);
+  series.forEach((p) => {
+    const bar = el("div", "bar"); bar.style.height = (p.mood / 5) * 100 + "%";
+    bar.title = p.label + ": " + p.mood + "/5"; bar.appendChild(el("span", null, p.label)); spark.appendChild(bar);
+  });
+  renderMoodDistribution(entries);
+  const cloud = buildTriggerCloud(patterns.triggerCounts);
+  const cloudEl = $("trigger-cloud"); clear(cloudEl);
+  $("cloud-empty").classList.toggle("hidden", cloud.length > 0);
+  cloud.forEach((c) => {
+    const tg = el("span", "t", c.trigger); tg.style.fontSize = (0.85 + c.weight * 0.16) + "rem";
+    tg.title = c.count + " entries"; cloudEl.appendChild(tg); cloudEl.appendChild(document.createTextNode(" "));
+  });
+}
+function statBox(v, label) { const box = el("div", "box"); box.appendChild(el("b", null, String(v))); box.appendChild(el("span", "muted", label)); return box; }
+function renderMoodDistribution(entries) {
+  const dist = $("mood-dist"); clear(dist);
+  const moods = entries.filter((e) => typeof e.mood === "number");
+  if (moods.length === 0) { dist.appendChild(el("p", "muted", "Log a few moods to see the spread.")); return; }
+  const counts = { 1:0,2:0,3:0,4:0,5:0 };
+  moods.forEach((e) => (counts[e.mood] = (counts[e.mood] || 0) + 1));
+  const max = Math.max(...Object.values(counts), 1);
+  const emoji = { 1:"😣",2:"😟",3:"😐",4:"🙂",5:"😄" };
+  for (let m = 5; m >= 1; m--) {
+    const row = el("div", "dist-row");
+    row.appendChild(el("span", "dist-emoji", emoji[m]));
+    const track = el("div", "dist-track"); const fill = el("div", "dist-fill"); fill.style.width = (counts[m] / max) * 100 + "%";
+    track.appendChild(fill); row.appendChild(track); row.appendChild(el("span", "dist-num", String(counts[m]))); dist.appendChild(row);
+  }
+}
+
+/* ---------- exam ---------- */
+function renderExam() {
+  const stored = localStorage.getItem("mm_exam_date") || "";
+  if (stored) $("exam-date").value = stored;
+  const cd = $("exam-countdown"); clear(cd);
+  const tips = $("exam-tips");
+  if (stored) {
+    const days = Math.max(0, Math.ceil((new Date(stored) - new Date()) / 86400000));
+    cd.appendChild(el("div", "count-big", String(days)));
+    cd.appendChild(el("div", "muted", t("exam_days")));
+    tips.textContent = days > 30 ? "Plenty of runway. Build steady habits now — sleep, breaks, one topic at a time."
+      : days > 7 ? "Final stretch. Protect your sleep and take real breaks — tired revision sticks poorly."
+      : "Almost there. Trust your prep, breathe, and be kind to yourself. You've done the work.";
+  } else { cd.appendChild(el("div", "muted", "Set your exam date to see a gentle countdown.")); tips.textContent = ""; }
+}
+
+/* ---------- toolkit ---------- */
+function renderToolkit() {
+  const list = $("toolkit-list"); if (!list) return; clear(list);
+  EXERCISES.forEach((ex) => {
+    const card = el("div", "tool");
+    card.appendChild(el("h3", null, ex.icon + " " + ex.title));
+    card.appendChild(el("p", "muted", ex.desc));
+    const b = el("button", "btn btn--block", "Start"); b.type = "button"; b.addEventListener("click", () => openExercise(ex));
+    card.appendChild(b); list.appendChild(card);
+  });
+}
+let exerciseTimer = null;
+function openExercise(ex) {
+  const overlay = el("div", "overlay");
+  const box = el("div", "modal");
+  box.appendChild(el("h3", null, ex.icon + " " + ex.title));
+  if (ex.kind === "phased") {
+    const circle = el("div", "breath-circle", ex.phases[0].label);
+    const count = el("div", "count-big", ex.phases[0].secs + "s");
+    box.appendChild(circle); box.appendChild(count);
+    let pi = 0, left = ex.phases[0].secs; circle.classList.toggle("in", ex.phases[0].big);
+    exerciseTimer = setInterval(() => {
+      left--;
+      if (left <= 0) { pi = (pi + 1) % ex.phases.length; left = ex.phases[pi].secs; circle.textContent = ex.phases[pi].label; circle.classList.toggle("in", ex.phases[pi].big); }
+      count.textContent = left + "s";
+    }, 1000);
+  } else { const ol = el("ol", "coping"); ex.steps.forEach((s) => ol.appendChild(el("li", null, s))); box.appendChild(ol); }
+  const done = el("button", "btn btn--primary btn--block", "Done — how do you feel now?"); done.type = "button";
+  const closeFn = () => { if (exerciseTimer) { clearInterval(exerciseTimer); exerciseTimer = null; } overlay.remove(); };
+  done.addEventListener("click", closeFn);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) closeFn(); });
+  box.appendChild(done); overlay.appendChild(box); document.body.appendChild(overlay);
+}
+
+/* ---------- safety plan (Stanley-Brown style, private & local) ---------- */
+const SP_FIELDS = [
+  { key: "warning", label: "Warning signs I am not okay", ph: "e.g. cannot sleep, skipping meals, spiralling thoughts" },
+  { key: "coping", label: "Things that calm me down", ph: "e.g. box breathing, a walk, music" },
+  { key: "distract", label: "People or places that distract me", ph: "e.g. call a friend, sit in the common room" },
+  { key: "people", label: "People I can reach out to", ph: "name — number" },
+  { key: "reasons", label: "My reasons to keep going", ph: "what matters to me" },
+];
+function openSafetyPlan(view) {
+  const plan = store.getSafetyPlan() || {};
+  const overlay = el("div", "overlay");
+  const box = el("div", "modal"); box.style.textAlign = "left"; box.style.maxHeight = "85vh"; box.style.overflowY = "auto";
+  box.appendChild(el("h3", null, "🛟 My safety plan"));
+  box.appendChild(el("p", "muted", view ? "Your calmer-moment plan, here when you need it." : "Fill this in a calm moment. It stays only on this device."));
+  const inputs = {};
+  SP_FIELDS.forEach((f) => {
+    box.appendChild(el("label", null, f.label));
+    if (view) { box.appendChild(el("p", null, plan[f.key] || "—")); }
+    else { const ta = el("textarea"); ta.value = plan[f.key] || ""; ta.placeholder = f.ph; ta.style.minHeight = "52px"; inputs[f.key] = ta; box.appendChild(ta); }
+  });
+  box.appendChild(el("p", "muted", "In crisis now: Tele-MANAS 14416 · iCall 022-2552-1111"));
+  const close = () => overlay.remove();
+  if (!view) {
+    const save = el("button", "btn btn--primary btn--block", "Save my plan"); save.type = "button";
+    save.addEventListener("click", () => { const np = {}; SP_FIELDS.forEach((f) => (np[f.key] = inputs[f.key].value.trim())); store.saveSafetyPlan(np); close(); });
+    box.appendChild(save);
+  }
+  const done = el("button", "btn btn--ghost btn--block", "Close"); done.type = "button"; done.addEventListener("click", close);
+  box.appendChild(done);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+  overlay.appendChild(box); document.body.appendChild(overlay);
+}
+
+/* ---------- crisis ---------- */
+function renderHelplines() {
+  const wrap = $("crisis-helplines"); clear(wrap);
+  HELPLINES.forEach((h) => {
+    const row = el("div", "help");
+    const left = el("div");
+    left.appendChild(el("div", "num", h.number));
+    left.appendChild(el("div", "muted", h.name + " · " + h.note));
+    const call = el("a", "btn btn--primary"); call.href = "tel:" + h.dial; call.textContent = "Call";
+    row.appendChild(left); row.appendChild(call); wrap.appendChild(row);
+  });
+}
+function openCrisis() {
+  state.lastScreen = SCREENS.find((s) => !$(s).classList.contains("hidden")) || "screen-app";
+  const wrap = $("crisis-helplines");
+  let b = document.getElementById("crisis-sp-btn");
+  if (wrap && !b) {
+    b = el("button", "btn btn--block"); b.id = "crisis-sp-btn"; b.type = "button"; b.style.marginBottom = "10px";
+    b.addEventListener("click", () => openSafetyPlan(Boolean(store.getSafetyPlan())));
+    wrap.parentNode.insertBefore(b, wrap);
+  }
+  if (b) b.textContent = store.getSafetyPlan() ? "🛟 Open my safety plan" : "🛟 Create a safety plan";
+  show("screen-crisis");
+}
+
+/* ---------- settings ---------- */
+function saveSettings() {
+  setKeys({ gemini: $("set-gemini").value, groq: $("set-groq").value });
+  $("set-gemini").value = ""; $("set-groq").value = "";
+  $("pin-status").textContent = "Keys saved for this session.";
+  show("screen-app");
+}
+function injectSettingsExtras() {
+  if (document.getElementById("settings-sp-btn")) return;
+  const sp = el("button", "btn btn--block", "🛟 Create / edit my safety plan");
+  sp.id = "settings-sp-btn"; sp.type = "button"; sp.style.marginTop = "10px";
+  sp.addEventListener("click", () => openSafetyPlan(false));
+  const note = el("p", "muted"); note.style.marginTop = "14px"; note.style.fontSize = ".78rem";
+  note.textContent = "MannMitra is evidence-informed (journaling, CBT-style reflection, grounding) and built for healthy use. Not a doctor or therapist. No ads, no tracking; your words are never used to train AI and never leave your device except the text you send for a reflection.";
+  const back = $("set-back");
+  if (back) { back.before(sp); back.before(note); }
+}
+
+/* ---------- events ---------- */
+function wireEvents() {
+  $("theme-btn").addEventListener("click", toggleTheme);
+  $("onb-start").addEventListener("click", startOnboarding);
+  $("onb-lang").addEventListener("change", (e) => applyLanguage(e.target.value, $("lang-status")));
+  $("set-lang").addEventListener("change", async (e) => {
+    await applyLanguage(e.target.value, $("set-lang-status"));
+    if (state.profile) { state.profile.language = e.target.value; store.saveProfile(state.profile); }
+    $("onb-lang").value = e.target.value;
+  });
+  document.querySelectorAll(".mood").forEach((b) => b.addEventListener("click", () => {
+    state.mood = Number(b.dataset.mood);
+    document.querySelectorAll(".mood").forEach((m) => m.setAttribute("aria-pressed", String(m === b)));
+  }));
+  $("checkin-submit").addEventListener("click", submitCheckin);
+  $("goto-talk").addEventListener("click", () => switchTab("talk"));
+  document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => switchTab(b.dataset.tab)));
+  $("chat-form").addEventListener("submit", sendChat);
+  $("exam-date").addEventListener("change", (e) => { localStorage.setItem("mm_exam_date", e.target.value); renderExam(); });
+  $("sos-btn").addEventListener("click", openCrisis);
+  $("crisis-back").addEventListener("click", () => show(state.lastScreen));
+  $("settings-btn").addEventListener("click", () => show("screen-settings"));
+  $("set-back").addEventListener("click", () => show(state.profile ? "screen-app" : "screen-onboard"));
+  $("set-save").addEventListener("click", saveSettings);
+  $("data-export").addEventListener("click", exportData);
+  $("data-delete").addEventListener("click", deleteData);
+  $("pin-set").addEventListener("click", openPinSet);
+  $("pin-clear").addEventListener("click", () => { clearPin(); refreshPinStatus(); });
+  $("pinset-cancel").addEventListener("click", () => show("screen-settings"));
+}
+function exportData() {
+  const blob = new Blob([store.exportData()], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = "mannmitra-data.json"; a.click();
+  URL.revokeObjectURL(url);
+}
+function deleteData() {
+  if (confirm("Delete all your check-ins, profile and PIN from this device? This can't be undone.")) {
+    store.deleteAll(); clearPin(); state.profile = null; state.chat = []; show("screen-onboard");
+  }
+}
+
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("./service-worker.js").catch(() => {});
+
+init();

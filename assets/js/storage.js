@@ -3,6 +3,7 @@
 
 const KEY_ENTRIES = "mm_entries";
 const KEY_PROFILE = "mm_profile";
+const KEY_SAFETY = "mm_safety";
 
 function read(key, fallback) {
   try {
@@ -59,6 +60,10 @@ export function updateEntryAnalysis(id, analysis) {
   return e;
 }
 
+/** Safety plan (Stanley-Brown style) — private, device-only. */
+export function getSafetyPlan() { return read(KEY_SAFETY, null); }
+export function saveSafetyPlan(plan) { return write(KEY_SAFETY, plan); }
+
 /** Export everything as a downloadable JSON blob URL. */
 export function exportData() {
   const payload = { profile: getProfile(), entries: getEntries(), exportedAt: new Date().toISOString() };
@@ -69,6 +74,7 @@ export function exportData() {
 export function deleteAll() {
   localStorage.removeItem(KEY_ENTRIES);
   localStorage.removeItem(KEY_PROFILE);
+  localStorage.removeItem(KEY_SAFETY);
 }
 
 function cryptoId() {
